@@ -2,7 +2,7 @@
  * @Author: kasuie
  * @Date: 2024-03-29 11:47:52
  * @LastEditors: kasuie
- * @LastEditTime: 2024-03-29 18:07:50
+ * @LastEditTime: 2024-03-30 00:13:48
  * @Description:
  */
 
@@ -173,19 +173,35 @@
       })
       .then((params) => {
         console.log("mio请求参数：", params);
-        content.innerText = params.rankList.length;
+        content.innerHTML = `
+          <p>当前日期为：${params.rankDate}</p>
+          <p>当前排行榜类型为：${params.rankType}</p>
+          <p>过滤一些非插画类型，实际抓取数据量为：${params.rankList.length}条</p>
+          <p>开始发送数据...</p>
+          <p style="color: #69f769;" class="mio-result-message"></p>
+        `;
         request({
           method: "POST",
           url: "https://kasuie.cc/apis/prank/newDate",
           headers: { "Content-Type": "application/json" },
           data: JSON.stringify(params),
-        }).then((res) => {
-          console.log("请求mio结果：", res);
-          GM.notification(res.message);
-        }).finally(() => {
-          onLoading(false);
-        });
-      }).finally(() => {
+        })
+          .then((res) => {
+            console.log("请求mio结果：", res);
+            let msg = document.querySelector(".mio-result-message");
+            if (res.success) {
+              msg.innerHTML = "好耶！发送数据成功~";
+            } else {
+              msg.style.color = "red";
+              msg.innerHTML = "发送失败惹";
+            }
+            GM.notification(res.message);
+          })
+          .finally(() => {
+            onLoading(false);
+          });
+      })
+      .finally(() => {
         onLoading(false);
       });
   };
@@ -221,6 +237,7 @@
     if (div.classList.contains("mio-tools-open")) {
       html.style.overflow = "unset";
       div.classList.remove("mio-tools-open");
+      content.innerHTML = null;
     } else {
       html.style.overflow = "hidden";
       div.classList.add("mio-tools-open");
@@ -315,6 +332,7 @@
 
             .mio-tools-main-content {
                 flex: 1;
+                color: #ffffff;
             }
 
             .mio-tools-main-btns {
