@@ -2,7 +2,7 @@
  * @Author: kasuie
  * @Date: 2024-03-29 11:47:52
  * @LastEditors: kasuie
- * @LastEditTime: 2024-03-29 17:41:52
+ * @LastEditTime: 2024-03-29 18:07:50
  * @Description:
  */
 
@@ -173,6 +173,7 @@
       })
       .then((params) => {
         console.log("mio请求参数：", params);
+        content.innerText = params.rankList.length;
         request({
           method: "POST",
           url: "https://kasuie.cc/apis/prank/newDate",
@@ -180,7 +181,12 @@
           data: JSON.stringify(params),
         }).then((res) => {
           console.log("请求mio结果：", res);
+          GM.notification(res.message);
+        }).finally(() => {
+          onLoading(false);
         });
+      }).finally(() => {
+        onLoading(false);
       });
   };
 
@@ -231,9 +237,7 @@
   addMio.className = "mio-btn-add";
   addMio.addEventListener("click", (_e) => {
     onLoading(true);
-    setTimeout(() => {
-      onLoading(false);
-    }, 10000);
+    getRankAndToMio(_e);
   });
 
   actions.className = "mio-tools-main-btns";
@@ -264,7 +268,7 @@
         outline: none;
         border: none;
         padding: 6px 10px;
-        z-index: 100;
+        z-index: 10;
     }
     #mio-tools {     
         position: fixed;
