@@ -2,12 +2,16 @@
  * @Author: kasuie
  * @Date: 2024-03-29 11:47:52
  * @LastEditors: kasuie
- * @LastEditTime: 2024-03-30 00:13:48
+ * @LastEditTime: 2024-03-30 16:13:51
  * @Description:
  */
 
 (function () {
   "use strict";
+
+  let DATE = "";
+
+  let mioDates = "";
 
   const format = (v, date, mode, uid, uploadName) => {
     let tags = v?.tags || [];
@@ -84,6 +88,35 @@
     };
   };
 
+  const getDate = (prev, next, date) => {
+    let currentDate = new Date();
+
+    if (!prev && !next) {
+      if (
+        currentDate.getHours() > 12 ||
+        (currentDate.getHours() === 12 && currentDate.getMinutes() > 0)
+      ) {
+        currentDate.setDate(currentDate.getDate() - 1);
+      } else {
+        currentDate.setDate(currentDate.getDate() - 2);
+      }
+    } else if (date) {
+      const year = date.slice(0, 4);
+      const month = date.slice(4, 6) - 1;
+      const day = date.slice(6, 8);
+      currentDate = new Date(year, month, day);
+      if (prev) {
+        currentDate.setDate(currentDate.getDate() - 1);
+      } else {
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+    const day = String(currentDate.getDate()).padStart(2, "0");
+    return `${year}${month}${day}`;
+  };
+
   const request = (data) => {
     return new Promise((resolve, reject) => {
       if (!data.method) {
@@ -110,9 +143,10 @@
   };
 
   const getRankAndToMio = (_e) => {
+    if (!onCheckDate()) return;
     const urlParams = new URLSearchParams(window.location.search);
     let mode = urlParams.get("mode"),
-      date = urlParams.get("date");
+      date = DATE;
     let data = [],
       url = `/ranking.php?format=json`,
       uid = null;
@@ -122,6 +156,8 @@
 
     const userDom = document.querySelector("div.sc-1asno00-0");
     const uploadName = userDom.getAttribute("title");
+
+    onLoading(true);
 
     const page_1 = request({
       method: "GET",
@@ -173,12 +209,15 @@
       })
       .then((params) => {
         console.log("mio请求参数：", params);
-        content.innerHTML = `
-          <p>当前日期为：${params.rankDate}</p>
-          <p>当前排行榜类型为：${params.rankType}</p>
-          <p>过滤一些非插画类型，实际抓取数据量为：${params.rankList.length}条</p>
-          <p>开始发送数据...</p>
-          <p style="color: #69f769;" class="mio-result-message"></p>
+        content.innerHTML =
+          content.innerHTML +
+          `
+          <div class="mio-pro-msg" style="display: flex;flex-direction: column;gap: 10px;">
+            <p>当前排行榜类型为：${params.rankType}</p>
+            <p>过滤一些非插画类型，实际抓取数据量为：${params.rankList.length}条</p>
+            <p>开始发送数据...</p>
+            <p style="color: #69f769;" class="mio-result-message"></p>
+          </div>
         `;
         request({
           method: "POST",
@@ -190,10 +229,17 @@
             console.log("请求mio结果：", res);
             let msg = document.querySelector(".mio-result-message");
             if (res.success) {
-              msg.innerHTML = "好耶！发送数据成功~";
+              msg.innerHTML = "🎉好耶！发送数据成功~";
+              if (mioDates) {
+                GM.setValue("mio-dates", `${mioDates},${date}`);
+                mioDates = `${mioDates},${date}`;
+              } else {
+                GM.setValue("mio-dates", date);
+                mioDates = data;
+              }
             } else {
               msg.style.color = "red";
-              msg.innerHTML = "发送失败惹";
+              msg.innerHTML = "💔发送失败惹";
             }
             GM.notification(res.message);
           })
@@ -206,12 +252,18 @@
       });
   };
 
+  const NOW = getDate();
+
   /** 操作按钮组 */
   const actions = document.createElement("div");
   /** 弹框内容 */
   const content = document.createElement("div");
   /** 提交到mio按钮 */
   const addMio = document.createElement("button");
+  /** 提交到mio按钮 */
+  const prevBtn = document.createElement("button");
+  /** 提交到mio按钮 */
+  const nextBtn = document.createElement("button");
   /** 关闭弹框按钮 */
   const span = document.createElement("span");
 
@@ -233,14 +285,38 @@
     }
   };
 
-  const onModalChange = () => {
+  const onModalChange = async () => {
     if (div.classList.contains("mio-tools-open")) {
       html.style.overflow = "unset";
       div.classList.remove("mio-tools-open");
       content.innerHTML = null;
     } else {
+      mioDates = await GM.getValue("mio-dates", "");
       html.style.overflow = "hidden";
       div.classList.add("mio-tools-open");
+      if (!DATE) {
+        DATE = getDate();
+      }
+      if (NOW == DATE) {
+        nextBtn.disabled = true;
+      }
+      content.innerHTML = `
+      <p style="color: #f5765c;" class="mio-error"></p>
+      <p>将要获取排行榜数据日期为：<span style="color: #69f769;" class="mio-date">${DATE}</span></p>
+      `;
+      onCheckDate();
+    }
+  };
+
+  const onCheckDate = () => {
+    if (mioDates && mioDates.includes(DATE)) {
+      const error = document.querySelector(".mio-error");
+      error.innerText = "💤当前日期已抓取过~";
+      return false;
+    } else {
+      const error = document.querySelector(".mio-error");
+      error.innerText = "";
+      return true;
     }
   };
 
@@ -253,11 +329,43 @@
   addMio.innerText = "抓取并提交Mio";
   addMio.className = "mio-btn-add";
   addMio.addEventListener("click", (_e) => {
-    onLoading(true);
     getRankAndToMio(_e);
+  });
+  prevBtn.innerText = "前一天";
+  prevBtn.className = "mio-btn-prev";
+  prevBtn.addEventListener("click", (_e) => {
+    const mioDate = document.querySelector(".mio-date");
+    const proMsg = content.querySelector(".mio-pro-msg");
+    DATE = getDate(true, null, DATE);
+    if (NOW != DATE && nextBtn.disabled) {
+      nextBtn.disabled = false;
+    }
+    if (proMsg) {
+      content.removeChild(proMsg);
+    }
+    mioDate.innerText = DATE;
+    onCheckDate();
+  });
+  nextBtn.innerText = "后一天";
+  nextBtn.className = "mio-btn-next";
+  nextBtn.addEventListener("click", (_e) => {
+    const mioDate = document.querySelector(".mio-date");
+    if (NOW == DATE) {
+      nextBtn.disabled = true;
+    } else {
+      DATE = getDate(null, true, DATE);
+      const proMsg = content.querySelector(".mio-pro-msg");
+      if (proMsg) {
+        content.removeChild(proMsg);
+      }
+      mioDate.innerText = DATE;
+      onCheckDate();
+    }
   });
 
   actions.className = "mio-tools-main-btns";
+  actions.appendChild(prevBtn);
+  actions.appendChild(nextBtn);
   actions.appendChild(addMio);
 
   content.className = "mio-tools-main-content";
@@ -269,23 +377,50 @@
 
   const btn = document.createElement("button");
   btn.id = "mio-tools-btn";
-  btn.style.position = "fixed";
-  btn.style.right = 0;
-  btn.style.top = "45%";
   btn.addEventListener("click", (_e) => onModalChange());
-  btn.innerHTML = "Mio Start";
+  btn.innerHTML = "Mio";
 
   document.querySelector("body").appendChild(btn);
 
   GM.addStyle(`
+    html {
+      &::-webkit-scrollbar {
+        width: 4px;
+        transition: all .3s ease-in-out;
+      }
+      &::-webkit-scrollbar-thumb {
+        cursor: pointer;
+        border-radius: 10px;
+        transition: all .15s ease-in-out;
+        background: rgba(255, 255, 255, 0.15);
+        box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+      }
+      &::-webkit-scrollbar-track {
+        border-radius: 10px;
+        box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+        background: rgba(255, 255, 255, 0.05);
+      }
+      &::-webkit-scrollbar-thumb:hover {
+        @apply bg-[#64d1e2];
+      }
+    }
     #mio-tools-btn { 
+        position: fixed;
+        right: 0px;
+        top: 85%;
         border-radius: 16px;
-        width: 50px;
-        height: 50px;
+        width: 36px;
+        height: 36px;
         outline: none;
         border: none;
         padding: 6px 10px;
         z-index: 10;
+        background: #0097fac7;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: #fff;
     }
     #mio-tools {     
         position: fixed;
@@ -322,23 +457,32 @@
                 position: absolute;
                 right: 10px;
                 top: 10px;
-                color: #0097fa;
+                color: #ffffff;
                 cursor: pointer;
+                rotate: 0deg;
+                transition: all .3s ease-in-out;
 
                 &:hover {
                     transform: scale(1.1);
+                    color: #0097fa;
+                    rotate: 180deg;
                 }
             }
 
             .mio-tools-main-content {
                 flex: 1;
                 color: #ffffff;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
             }
 
             .mio-tools-main-btns {
-                text-align: end;
+                display: flex;
+                justify-content: flex-end;
+                gap: 16px;
 
-                .mio-btn-add {
+                .mio-btn-add, .mio-btn-prev, .mio-btn-next {
                     outline: none;
                     border: none;
                     padding: 6px 10px;
@@ -346,6 +490,11 @@
                     cursor: pointer;
                     background: #0097fa;
                     color: #ebebeb;
+                }
+
+                button:disabled {
+                  opacity: 0.7;
+                  cursor: not-allowed;
                 }
             }
         }
