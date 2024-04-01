@@ -2,12 +2,14 @@
  * @Author: kasuie
  * @Date: 2024-03-29 11:47:52
  * @LastEditors: kasuie
- * @LastEditTime: 2024-03-30 16:13:51
+ * @LastEditTime: 2024-04-01 21:10:46
  * @Description:
  */
 
 (function () {
   "use strict";
+
+  let DEV = false;
 
   let DATE = "";
 
@@ -48,9 +50,12 @@
         exts.push(ext);
       }
     }
-    pixAvatar = v.profile_img
-      ?.replace("https://i.pximg.net", "")
-      ?.replace("_50", "");
+
+    if (v.profile_img && !v.profile_img.includes("no_profile")) {
+      pixAvatar = v.profile_img
+        ?.replace("https://i.pximg.net/user-profile/img/", "")
+        ?.replace("_50", "");
+    }
 
     return {
       pid: v.illust_id,
@@ -64,7 +69,7 @@
           ?.replace(/▶(.*)/, "") || v.user_name,
       rankType: mode,
       tags: tags?.join(","),
-      exts: exts?.join(","),
+      exts: exts[0],
       pageCount: pageCount,
       title: v.title,
       datePath: pathDate,
@@ -182,6 +187,9 @@
     Promise.all([page_1, page_2])
       .then(([res_1, res_2]) => {
         if (res_1 && res_2) {
+          if (DEV) {
+            console.log("page1:", res_1, "page_2", res_2);
+          }
           const { contents: page1, date: date1, mode: mode1 } = res_1;
           const {
             contents: page2,
@@ -192,9 +200,9 @@
           } = res_2;
           if (date1 == date2 && mode1 == mode2) {
             [...page1, ...page2].forEach((ele) => {
-              if (+ele?.illust_type == 0) {
-                data.push(format(ele, date1, mode1, uid, uploadName));
-              }
+              // if (+ele?.illust_type == 0) {
+              data.push(format(ele, date1, mode1, uid, uploadName));
+              // }
             });
             return {
               rankDate: date1,
@@ -208,7 +216,10 @@
         }
       })
       .then((params) => {
-        console.log("mio请求参数：", params);
+        if (DEV) {
+          console.log("请求mio参数:", params);
+          return null;
+        }
         content.innerHTML =
           content.innerHTML +
           `
