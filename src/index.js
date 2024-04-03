@@ -2,7 +2,7 @@
  * @Author: kasuie
  * @Date: 2024-03-29 11:47:52
  * @LastEditors: kasuie
- * @LastEditTime: 2024-04-01 21:10:46
+ * @LastEditTime: 2024-04-03 18:09:19
  * @Description:
  */
 
@@ -14,6 +14,24 @@
   let DATE = "";
 
   let mioDates = "";
+
+  const isArtwork = () => {
+    if (
+      window.location.pathname &&
+      window.location.pathname.includes("artworks")
+    ) {
+      const pathname = window.location.pathname.split("/");
+      if (pathname?.length) {
+        return +pathname[pathname.length - 1];
+      } else {
+        return null;
+      }
+    } else {
+      return null;
+    }
+  };
+
+  const pid = isArtwork();
 
   const format = (v, date, mode, uid, uploadName) => {
     let tags = v?.tags || [];
@@ -90,6 +108,106 @@
       status: v?.is_bookmarked ? v.yes_rank - 101 : v.yes_rank,
       startDate: v.yes_rank == 0 ? `${date}_${v.yes_rank}:${v.rank}` : null,
       endDate: v.yes_rank > 0 ? `${date}_${v.yes_rank}:${v.rank}` : null,
+    };
+  };
+
+  const formatIllust = (image) => {
+
+    const {
+      id,
+      height,
+      width,
+      aiType,
+      pageCount,
+      urls,
+      createDate,
+      bookmarkCount,
+      illustType,
+      title,
+      tags: { tags: tagsObj },
+      userName: author,
+      userId: uid,
+      userAccount: account,
+    } = image;
+
+    let pathDate = null,
+      avatar = null,
+      pixAvatar = null,
+      ext = null,
+      tags = [],
+      r18 = 0;
+
+    const divAvatar = document.querySelector(`a[href="/users/${uid}"]`);
+  
+    if(divAvatar) {
+      const src = divAvatar.querySelector("img")?.src || null;
+      if(src) {
+        pixAvatar = src.replace("https://i.pximg.net/user-profile/img/", "")
+        ?.replace("_170", "");
+      }
+    }
+
+    if (urls && urls.original) {
+      let matches = urls.original.match(
+        /\/(\d{4}\/\d{2}\/\d{2}\/\d{2}\/\d{2}\/\d{2})\//
+      );
+      if (matches && matches[1]) {
+        pathDate = matches[1];
+      }
+      const arrs = urls.original.split(".");
+      ext = arrs[arrs.length - 1];
+    }
+
+    if (tagsObj?.length) {
+      tagsObj.forEach((v) => {
+        if (r18 != 1 && v.tag.includes("R-18")) {
+          return (r18 = 1);
+        }
+        if (
+          v.tag.includes("收藏") ||
+          v.tag.includes("users") ||
+          v.tag.includes("bookmarks") ||
+          v.tag.includes("Bookmarks")
+        ) {
+          return;
+        }
+        if (
+          aiType != 2 &&
+          (v.tag.includes("AIイラスト") || v.tag.includes("ai绘图"))
+        ) {
+          aiType = 2;
+        }
+        if(v.tag) {
+          tags.push(v.tag);
+        }
+        if (v.translation && v.translation.en) {
+          tags.push(v.translation.en);
+        }
+      });
+    }
+
+    return {
+      pid: +id,
+      pixAccount: account,
+      height,
+      width,
+      aiType,
+      pageCount,
+      createDate,
+      bookmarks: bookmarkCount,
+      pixAvatar,
+      title,
+      uid,
+      ext,
+      author:
+        author
+          ?.replace(/＠(.*)/, "")
+          ?.replace(/@(.*)/, "")
+          ?.replace(/❤(.*)/, "")
+          ?.replace(/■(.*)/, "")
+          ?.replace(/▶(.*)/, "") || author,
+      pathDate,
+      tags: tags,
     };
   };
 
@@ -263,6 +381,33 @@
       });
   };
 
+  const getArtworkAndToMio = (_e) => {
+    console.log("pid", pid);
+  };
+
+  const getArtwork = () => {
+    request({
+      method: "GET",
+      url: `/ajax/illust/${pid}`,
+      headers: {
+        referer: "https://www.pixiv.net/",
+        "Accept-Language:":
+          "zh-CN,zh-CN;q=0.9,zh;q=0.8,en-US;q=0.7,en,en-CN;q=0.6",
+      },
+    }).then((res) => {
+      console.log("res", res);
+      if (!res.error) {
+        const artwork = formatIllust(res.body);
+        console.log(artwork, "artwork");
+        content.innerHTML = `
+            <p>Pid：${artwork.pid} 画师：${artwork.author}</P>
+            <p>标题：${artwork.title}</P>
+            <p>标签：${artwork.title}</P>
+            `;
+      }
+    });
+  };
+
   const NOW = getDate();
 
   /** 操作按钮组 */
@@ -305,17 +450,25 @@
       mioDates = await GM.getValue("mio-dates", "");
       html.style.overflow = "hidden";
       div.classList.add("mio-tools-open");
-      if (!DATE) {
-        DATE = getDate();
+      if (pid) {
+        content.innerHTML = `
+          <p style="color: #f5765c;" class="mio-error"></p>
+          <p>正在获取：<span style="color: #69f769;" class="mio-date">${pid}</span>数据</p>
+          `;
+        getArtwork();
+      } else {
+        if (!DATE) {
+          DATE = getDate();
+        }
+        if (NOW == DATE) {
+          nextBtn.disabled = true;
+        }
+        content.innerHTML = `
+          <p style="color: #f5765c;" class="mio-error"></p>
+          <p>将要获取排行榜数据日期为：<span style="color: #69f769;" class="mio-date">${DATE}</span></p>
+          `;
+        onCheckDate();
       }
-      if (NOW == DATE) {
-        nextBtn.disabled = true;
-      }
-      content.innerHTML = `
-      <p style="color: #f5765c;" class="mio-error"></p>
-      <p>将要获取排行榜数据日期为：<span style="color: #69f769;" class="mio-date">${DATE}</span></p>
-      `;
-      onCheckDate();
     }
   };
 
@@ -340,7 +493,11 @@
   addMio.innerText = "抓取并提交Mio";
   addMio.className = "mio-btn-add";
   addMio.addEventListener("click", (_e) => {
-    getRankAndToMio(_e);
+    if (pid) {
+      getArtworkAndToMio(_e);
+    } else {
+      getRankAndToMio(_e);
+    }
   });
   prevBtn.innerText = "前一天";
   prevBtn.className = "mio-btn-prev";
@@ -375,8 +532,11 @@
   });
 
   actions.className = "mio-tools-main-btns";
-  actions.appendChild(prevBtn);
-  actions.appendChild(nextBtn);
+
+  if (!pid) {
+    actions.appendChild(prevBtn);
+    actions.appendChild(nextBtn);
+  }
   actions.appendChild(addMio);
 
   content.className = "mio-tools-main-content";
@@ -415,7 +575,7 @@
         @apply bg-[#64d1e2];
       }
     }
-    #mio-tools-btn { 
+    #mio-tools-btn {
         position: fixed;
         right: 0px;
         top: 85%;
@@ -433,7 +593,7 @@
         cursor: pointer;
         color: #fff;
     }
-    #mio-tools {     
+    #mio-tools {
         position: fixed;
         display: flex;
         align-items: center;
@@ -450,13 +610,13 @@
     .mio-tools-open {
         width: 100% !important;
         height: 100vh !important;
-        
+
         > .mio-tools-main {
             position: relative;
             background: #010101;
             width: 600px;
             height: 300px;
-            border-radius: 16px;    
+            border-radius: 16px;
             padding: 32px;
             transition: all .1s ease-in-out;
             display: flex;
