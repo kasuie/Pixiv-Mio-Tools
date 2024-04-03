@@ -2,7 +2,7 @@
  * @Author: kasuie
  * @Date: 2024-03-29 11:47:52
  * @LastEditors: kasuie
- * @LastEditTime: 2024-04-03 18:09:19
+ * @LastEditTime: 2024-04-03 23:10:47
  * @Description:
  */
 
@@ -14,6 +14,8 @@
   let DATE = "";
 
   let mioDates = "";
+
+  let artwork = null;
 
   const isArtwork = () => {
     if (
@@ -31,7 +33,76 @@
     }
   };
 
-  const pid = isArtwork();
+  let pid = isArtwork();
+
+  const createRadio = (id, name, value, labelText, div, field) => {
+    const radioButton = document.createElement("input");
+    radioButton.type = "radio";
+    radioButton.id = id;
+    radioButton.name = name;
+    radioButton.value = value;
+    radioButton.addEventListener("click", () => {
+      artwork[field] = +radioButton.value;
+    });
+    if (+artwork[field] == +value) {
+      radioButton.checked = true;
+    }
+
+    const label = document.createElement("label");
+    label.htmlFor = id;
+    label.textContent = labelText;
+
+    div.className = "mio-options-item";
+    div.appendChild(radioButton);
+    div.appendChild(label);
+  };
+
+  const renderOptions = (root) => {
+    const tips = document.createElement("p");
+    tips.className = "mio-result-message";
+    const r18 = document.createElement("div");
+    createRadio("r18-option0", "r18options", 10, "默认", r18, "r18");
+    createRadio("r18-option1", "r18options", 0, "r12", r18, "r18");
+    createRadio("r18-option2", "r18options", 1, "r18", r18, "r18");
+    createRadio("r18-option3", "r18options", 2, "全年龄", r18, "r18");
+
+    const wall = document.createElement("div");
+    createRadio("wall-option0", "walloptions", 0, "默认", wall, "wallpaper");
+    createRadio(
+      "wall-option1",
+      "walloptions",
+      1,
+      "横屏壁纸",
+      wall,
+      "wallpaper"
+    );
+    createRadio(
+      "wall-option2",
+      "walloptions",
+      2,
+      "竖屏壁纸",
+      wall,
+      "wallpaper"
+    );
+    createRadio("wall-option3", "walloptions", 3, "头像", wall, "wallpaper");
+
+    root.appendChild(r18);
+    root.appendChild(wall);
+    root.appendChild(tips);
+  };
+
+  const topError = (text) => {
+    const error = document.querySelector(".mio-error");
+    error.innerText = text;
+  };
+
+  const onTips = (text, error) => {
+    let msg = document.querySelector(".mio-result-message");
+    if (msg) {
+      msg.style.color = error ? "red" : "#69f769";
+      msg.innerHTML = text;
+    }
+  };
 
   const format = (v, date, mode, uid, uploadName) => {
     let tags = v?.tags || [];
@@ -112,7 +183,6 @@
   };
 
   const formatIllust = (image) => {
-
     const {
       id,
       height,
@@ -130,20 +200,21 @@
       userAccount: account,
     } = image;
 
-    let pathDate = null,
-      avatar = null,
+    let datePath = null,
       pixAvatar = null,
       ext = null,
-      tags = [],
-      r18 = 0;
+      tag = [],
+      r18 = 10;
 
     const divAvatar = document.querySelector(`a[href="/users/${uid}"]`);
-  
-    if(divAvatar) {
+
+    if (divAvatar) {
       const src = divAvatar.querySelector("img")?.src || null;
-      if(src) {
-        pixAvatar = src.replace("https://i.pximg.net/user-profile/img/", "")
-        ?.replace("_170", "");
+      if (src && !src.includes("no_profile")) {
+        pixAvatar = src
+          .replace("https://i.pximg.net/user-profile/img/", "")
+          ?.replace("_170", "")
+          ?.replace("_50", "");
       }
     }
 
@@ -152,7 +223,7 @@
         /\/(\d{4}\/\d{2}\/\d{2}\/\d{2}\/\d{2}\/\d{2})\//
       );
       if (matches && matches[1]) {
-        pathDate = matches[1];
+        datePath = matches[1];
       }
       const arrs = urls.original.split(".");
       ext = arrs[arrs.length - 1];
@@ -177,28 +248,37 @@
         ) {
           aiType = 2;
         }
-        if(v.tag) {
-          tags.push(v.tag);
+        if (v.tag) {
+          tag.push(v.tag);
         }
         if (v.translation && v.translation.en) {
-          tags.push(v.translation.en);
+          tag.push(v.translation.en);
         }
       });
     }
 
+    tag = [...new Set(tag)];
+
+    const userDom = document.querySelector("div.sc-1asno00-0");
+    const uploadUserName = userDom?.getAttribute("title");
+
     return {
       pid: +id,
       pixAccount: account,
+      illustType,
       height,
       width,
       aiType,
       pageCount,
       createDate,
-      bookmarks: bookmarkCount,
+      status: bookmarkCount,
       pixAvatar,
       title,
       uid,
-      ext,
+      ext: [ext],
+      r18,
+      wallpaper: 0,
+      aspectRatio: Math.round((width / height) * 1000) / 1000,
       author:
         author
           ?.replace(/＠(.*)/, "")
@@ -206,8 +286,11 @@
           ?.replace(/❤(.*)/, "")
           ?.replace(/■(.*)/, "")
           ?.replace(/▶(.*)/, "") || author,
-      pathDate,
-      tags: tags,
+      datePath,
+      tag,
+      tags: tag.join(","),
+      uploadUid: -1,
+      uploadUserName,
     };
   };
 
@@ -382,7 +465,36 @@
   };
 
   const getArtworkAndToMio = (_e) => {
-    console.log("pid", pid);
+    console.log("artwork", artwork);
+    if (+artwork.pid == +pid && artwork.illustType == 0) {
+      if (DEV) {
+        return console.log("新增mio请求参数：", artwork);
+      }
+      request({
+        method: "POST",
+        url: "https://kasuie.cc/apis/img/save",
+        headers: { "Content-Type": "application/json" },
+        data: JSON.stringify(artwork),
+      })
+        .then((res) => {
+          console.log("请求新增mio结果：", res);
+          if (res.success) {
+            onTips(`🎉好耶！${res.message}~`);
+          } else {
+            onTips(`💔新增失败惹。${res.message}~`, true);
+          }
+        })
+        .catch((e) => onTips(`💔新增失败惹。${e}~`, true))
+        .finally(() => {
+          onLoading(false);
+        });
+    } else {
+      topError(
+        artwork.pid != pid
+          ? "❗pid不一致，请检查~"
+          : "💤该作品类型不支持添加mio~"
+      );
+    }
   };
 
   const getArtwork = () => {
@@ -395,15 +507,27 @@
           "zh-CN,zh-CN;q=0.9,zh;q=0.8,en-US;q=0.7,en,en-CN;q=0.6",
       },
     }).then((res) => {
-      console.log("res", res);
       if (!res.error) {
-        const artwork = formatIllust(res.body);
-        console.log(artwork, "artwork");
-        content.innerHTML = `
+        artwork = formatIllust(res.body);
+        if (
+          artwork.illustType != 0 ||
+          artwork.tag.includes("漫画") ||
+          artwork.tag.includes("manga")
+        ) {
+          topError("💤该作品类型不支持添加mio~");
+          addMio.disabled = true;
+        } else {
+          topError("");
+          addMio.disabled = false;
+        }
+        content.innerHTML =
+          content.innerHTML +
+          `
             <p>Pid：${artwork.pid} 画师：${artwork.author}</P>
             <p>标题：${artwork.title}</P>
-            <p>标签：${artwork.title}</P>
+            <p>标签：${artwork.tags}</P>
             `;
+        renderOptions(content);
       }
     });
   };
@@ -450,6 +574,7 @@
       mioDates = await GM.getValue("mio-dates", "");
       html.style.overflow = "hidden";
       div.classList.add("mio-tools-open");
+      pid = isArtwork();
       if (pid) {
         content.innerHTML = `
           <p style="color: #f5765c;" class="mio-error"></p>
@@ -474,8 +599,7 @@
 
   const onCheckDate = () => {
     if (mioDates && mioDates.includes(DATE)) {
-      const error = document.querySelector(".mio-error");
-      error.innerText = "💤当前日期已抓取过~";
+      topError("💤当前日期已抓取过~");
       return false;
     } else {
       const error = document.querySelector(".mio-error");
@@ -646,6 +770,21 @@
                 display: flex;
                 flex-direction: column;
                 gap: 10px;
+
+                .mio-options-item {
+                  display: flex;
+                  align-items: center;    
+                  gap: 5px;
+                  user-select: none;
+
+                  > input, label {
+                    cursor: pointer;
+                  }
+
+                  > label {
+                    margin-right: 20px;
+                  }
+                }
             }
 
             .mio-tools-main-btns {
